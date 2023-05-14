@@ -76,7 +76,7 @@ namespace AssetStudioGUI
         public static bool ExportTextAsset(AssetItem item, string exportPath)
         {
             var m_TextAsset = (TextAsset)(item.Asset);
-            var extension = ".txt";
+            var extension = "";
             if (Properties.Settings.Default.restoreExtensionName)
             {
                 if (!string.IsNullOrEmpty(item.Container))

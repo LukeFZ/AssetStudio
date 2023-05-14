@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Linq;
+using AssetStudio.Plugin;
 
 namespace AssetStudio
 {
@@ -16,12 +17,15 @@ namespace AssetStudio
 
         public FileReader(string path) : this(path, File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) { }
 
-        public FileReader(string path, Stream stream) : base(stream, EndianType.BigEndian)
+        public FileReader(string path, Stream stream) : base(LoadFile(stream, path), EndianType.BigEndian)
         {
             FullPath = Path.GetFullPath(path);
             FileName = Path.GetFileName(path);
             FileType = CheckFileType();
         }
+
+        private static Stream LoadFile(Stream stream, string path)
+            => PluginManager.ParseFileUsingPlugin(stream, path) ?? stream;
 
         private FileType CheckFileType()
         {
