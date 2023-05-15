@@ -3,6 +3,7 @@ using System.Diagnostics;
 using K4os.Compression.LZ4;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace AssetStudio.Plugin.Impl;
 
@@ -43,6 +44,9 @@ public class NeteaseLoader : IFileLoader
     {
         var reader = new EndianBinaryReader(file);
         var unityFs = reader.ReadStringToNull();
+        if (unityFs != "UnityFS")
+            return null;
+
         var version = reader.ReadUInt32();
         var unityVer = reader.ReadStringToNull();
         var unityRev = reader.ReadStringToNull();
@@ -165,7 +169,7 @@ public class NeteaseLoader : IFileLoader
             return;
 
         int encSectionLength;
-        if (enc[verOffset + 4] == 0xaa)
+        if (enc[verOffset + 4] == 0xaa && enc[verOffset + 4 + 2] == 0xbb)
             encSectionLength = 0x1000;
         else
         {
@@ -199,13 +203,13 @@ public class NeteaseLoader : IFileLoader
         if (actualEncryptedLength > 0x9f)
         {
             var keyBlock = new byte[0x80];
-            Buffer.BlockCopy(enc, actualEncryptedOffset, keyBlock, 0, 0x80); // enc[actualEncryptedOffset..(actualEncryptedOffset + 0x80)]
-            
+            var keyBlockInt = MemoryMarshal.Cast<byte, uint>(keyBlock);
+            Buffer.BlockCopy(enc, actualEncryptedOffset, keyBlock, 0, 0x80);
+
             NeteaseRc4.Decrypt(enc, actualEncryptedOffset, 0x80, BitConverter.GetBytes(crc));
 
             var rc4Key2 = BitConverter.GetBytes(crcKey[2]); // Not actually the array reference but the same value
             NeteaseRc4.Decrypt(keyBlock, 0, 0x80, rc4Key2); // Because it was so fun the first time
-            Debug.Assert(!keyBlock.SequenceEqual(enc[actualEncryptedOffset..(actualEncryptedOffset + 0x80)]), "!keyBlock.SequenceEqual(enc[actualEncryptedOffset..(actualEncryptedOffset + 0x80)])");
 
             uint[] keyTable2 =
             {
@@ -220,8 +224,6 @@ public class NeteaseLoader : IFileLoader
                 0x568u
             };
 
-            var keyTable2Bytes = keyTable2.SelectMany(BitConverter.GetBytes).ToArray();
-
             var remainingEncSection = actualEncryptedLength - 0xa0;
             var remainingNonAligned = actualEncryptedLength - (remainingEncSection & 0xffffff80) - 0xa0;
             if (actualEncryptedLength >= 0x120)
@@ -231,54 +233,22 @@ public class NeteaseLoader : IFileLoader
                 {
                     var type = keyTable2[i % 9] & 3;
 
-                    switch (type)
+                    Func<uint, uint, uint> getValFunc = type switch
                     {
-                        case 0:
-                            for (int j = 0; j < 32; j++)
-                            {
-                                var keyBlockVal = BitConverter.ToUInt32(keyBlock.AsSpan(j * 4, 4));
-                                var keyTable2Val = BitConverter.ToUInt32(keyTable2Bytes.AsSpan(j % 9 * 4, 4));
-                                var val = keyTable2Val ^ keyBlockVal ^ (32u - (uint)j);
-                                enc[currentBlockOffset + j * 4] ^= (byte)val;
-                                enc[currentBlockOffset + j * 4 + 1] ^= (byte)(val >> 8);
-                                enc[currentBlockOffset + j * 4 + 2] ^= (byte)(val >> 16);
-                                enc[currentBlockOffset + j * 4 + 3] ^= (byte)(val >> 24);
-                            }
-                            break;
-                        case 1:
-                            for (int j = 0; j < 32; j++)
-                            {
-                                var keyBlockVal = BitConverter.ToUInt32(keyBlock.AsSpan(j * 4, 4));
-                                var val = crcKey[keyBlockVal & 3] ^ keyBlockVal;
-                                enc[currentBlockOffset + j * 4] ^= (byte) val; 
-                                enc[currentBlockOffset + j * 4 + 1] ^= (byte)(val >> 8);
-                                enc[currentBlockOffset + j * 4 + 2] ^= (byte)(val >> 16);
-                                enc[currentBlockOffset + j * 4 + 3] ^= (byte)(val >> 24);
-                            }
-                            break;
-                        case 2:
-                            for (int j = 0; j < 32; j++)
-                            {
-                                var keyBlockVal = BitConverter.ToUInt32(keyBlock.AsSpan(j * 4, 4));
-                                var val = crcKey[keyBlockVal & 3] ^ keyBlockVal ^ j;
-                                enc[currentBlockOffset + j * 4] ^= (byte)val;
-                                enc[currentBlockOffset + j * 4 + 1] ^= (byte)(val >> 8);
-                                enc[currentBlockOffset + j * 4 + 2] ^= (byte)(val >> 16);
-                                enc[currentBlockOffset + j * 4 + 3] ^= (byte)(val >> 24);
-                            }
-                            break;
-                        case 3:
-                            for (int j = 0; j < 32; j++)
-                            {
-                                var keyBlockVal = BitConverter.ToUInt32(keyBlock.AsSpan(j * 4, 4));
-                                var keyTable2Val = BitConverter.ToUInt32(keyTable2Bytes.AsSpan(j % 9 * 4, 4));
-                                var val = crcKey[keyTable2Val & 3] ^ keyBlockVal ^ j;
-                                enc[currentBlockOffset + j * 4] ^= (byte)val;
-                                enc[currentBlockOffset + j * 4 + 1] ^= (byte)(val >> 8);
-                                enc[currentBlockOffset + j * 4 + 2] ^= (byte)(val >> 16);
-                                enc[currentBlockOffset + j * 4 + 3] ^= (byte)(val >> 24);
-                            }
-                            break;
+                        0 => (idx, keyBlockVal) => keyTable2[idx % 9] ^ keyBlockVal ^ (32u - idx),
+                        1 => (idx, keyBlockVal) => crcKey[keyBlockVal & 3] ^ keyBlockVal,
+                        2 => (idx, keyBlockVal) => crcKey[keyBlockVal & 3] ^ keyBlockVal ^ idx,
+                        3 => (idx, keyBlockVal) => crcKey[keyTable2[idx % 9] & 3] ^ keyBlockVal ^ idx,
+                        _ => throw new UnreachableException()
+                    };
+
+                    var currentBlockSpan = MemoryMarshal.Cast<byte, uint>(enc.AsSpan(currentBlockOffset, 0x80));
+
+                    for (int j = 0; j < 32; j++)
+                    {
+                        var keyBlockVal = keyBlockInt[j];
+                        var val = getValFunc((uint)j, keyBlockVal);
+                        currentBlockSpan[j] ^= val;
                     }
 
                     currentBlockOffset += 0x80;
