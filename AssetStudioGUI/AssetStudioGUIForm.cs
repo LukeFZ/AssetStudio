@@ -126,14 +126,7 @@ namespace AssetStudioGUI
             {
                 ResetForm();
                 assetsManager.SpecifyUnityVersion = specifyUnityVersion.Text;
-                if (paths.Length == 1 && Directory.Exists(paths[0]))
-                {
-                    await Task.Run(() => assetsManager.LoadFolder(paths[0]));
-                }
-                else
-                {
-                    await Task.Run(() => assetsManager.LoadFiles(paths));
-                }
+                await Task.Run(() => assetsManager.LoadPaths(paths));
                 BuildAssetStructures();
             }
         }

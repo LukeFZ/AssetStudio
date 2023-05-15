@@ -37,6 +37,45 @@ namespace AssetStudio
             Load(toReadFile);
         }
 
+        public void LoadPaths(params string[] paths)
+        {
+            foreach (var path in paths)
+            {
+                if (Directory.Exists(path))
+                {
+                    MergeSplitAssets(path, true);
+                    var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories).ToList();
+                    var toReadFile = ProcessingSplitFiles(files);
+                    foreach (var file in toReadFile)
+                    {
+                        importFiles.Add(file);
+                        importFilesHash.Add(Path.GetFileName(file));
+                    }
+                }
+                else
+                {
+                    importFiles.Add(path);
+                    importFilesHash.Add(Path.GetFileName(path));
+                }
+            }
+
+            Progress.Reset();
+            //use a for loop because list size can change
+            for (var i = 0; i < importFiles.Count; i++)
+            {
+                LoadFile(importFiles[i]);
+                Progress.Report(i + 1, importFiles.Count);
+            }
+
+            importFiles.Clear();
+            importFilesHash.Clear();
+            noexistFiles.Clear();
+            assetsFileListHash.Clear();
+
+            ReadAssets();
+            ProcessAssets();
+        }
+
         private void Load(string[] files)
         {
             foreach (var file in files)
@@ -64,8 +103,16 @@ namespace AssetStudio
 
         private void LoadFile(string fullName)
         {
-            var reader = new FileReader(fullName);
-            LoadFile(reader);
+            try
+            {
+                var reader = new FileReader(fullName);
+                LoadFile(reader);
+            }
+            catch (Exception e)
+            {
+                var str = $"Error while reading file {fullName}";
+                Logger.Error(str, e);
+            }
         }
 
         private void LoadFile(FileReader reader)
