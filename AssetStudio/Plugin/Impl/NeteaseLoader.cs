@@ -37,7 +37,7 @@ public class NeteaseLoader : IFileLoader
 
         var (encData, _) = encInfo.Value;
 
-        return encData != null && (CanBeDecrypted1(encData) || CanBeDecrypted2(encData));
+        return encData != null && (CanBeDecrypted1(encData) || GetObfuscatedVersionOffset(encData) != -1);
     }
 
     private static (byte[] encData, long encPos)? GetEncryptedBlockData(Stream file)
@@ -91,7 +91,7 @@ public class NeteaseLoader : IFileLoader
         var uncompressedBlockSize = blockInfoReader.ReadUInt32();
         var compressedBlockSize = blockInfoReader.ReadUInt32();
 
-        var encBlockSize = uncompressedBlockSize < 0x1000 ? uncompressedBlockSize : 0x1000;
+        var encBlockSize = compressedBlockSize < 0x1000 ? compressedBlockSize : 0x1000;
         var encPos = reader.Position;
         return (reader.ReadBytes((int)encBlockSize), encPos);
     }
@@ -121,14 +121,14 @@ public class NeteaseLoader : IFileLoader
         return false;
     }
 
-    private static bool CanBeDecrypted2(byte[] enc) // Checks encryption of AssetBundleVersion 
+    private static int GetObfuscatedVersionOffset(byte[] enc) // Checks encryption of AssetBundleVersion 
     {
         if (enc.Length < 64)
-            return false;
+            return -1;
 
         const uint check = 0x7e07;
 
-        for (int i = 3; i < 60; i++)
+        for (int i = 0; i < 64; i++)
         {
             var magic = BitConverter.ToUInt16(enc.AsSpan(i, 2));
             if (magic != 0xddee) continue;
@@ -138,35 +138,23 @@ public class NeteaseLoader : IFileLoader
 
             var bit = packedUnityVerYear - 0x2017;
             if ((check & 1 << bit) == 0) continue;
-            return true;
+            return i;
         }
 
-        return false;
+        return -1;
     }
 
     private static void Decrypt(byte[] enc)
     {
-        const uint check = 0x7e07;
+        var verOffset = GetObfuscatedVersionOffset(enc); // Offset after the encrypted year
+        DecryptVersion(enc, verOffset);
+        var encSectionOffset = (verOffset > 0x1f ? 0x10 : 0) + 0x30;
+        DecryptData(enc, encSectionOffset);
+    }
 
-        ushort packedUnityVerYear = 0;
-        var verOffset = -1; // Offset after the encrypted year
-        for (int i = 0; i < 64; i++)
-        {
-            var magic = BitConverter.ToUInt16(enc.AsSpan(i, 2));
-            if (magic != 0xddee) continue;
-
-            packedUnityVerYear = BitConverter.ToUInt16(enc.AsSpan(i + 2, 2));
-            if (packedUnityVerYear - 0x2017 > 0xe) continue;
-
-            var bit = packedUnityVerYear - 0x2017;
-            if ((check & 1 << bit) == 0) continue;
-
-            verOffset = i;
-            break;
-        }
-
-        if (verOffset == -1)
-            return;
+    private static void DecryptVersion(byte[] enc, int verOffset)
+    {
+        var packedUnityVerYear = BitConverter.ToUInt16(enc.AsSpan(verOffset + 2, 2));
 
         // This check only works for version 3 of the encryption.
         // We know the encrypted section length already, so this is skippable
@@ -177,11 +165,27 @@ public class NeteaseLoader : IFileLoader
             encSectionLength = enc[verOffset + 4] * 0x10 + enc[verOffset + 4 + 2];
         }*/
 
-        var encSectionOffset = (verOffset > 0x1f ? 0x10 : 0) + 0x30;
-        var actualEncryptedLength = (uint)enc.Length - (uint)encSectionOffset;
+        // Unpack unity year back to 4 bytes (21 20 -> 2021)
+        enc[verOffset] = (byte)((packedUnityVerYear >> 12) & 0xf | 0x30);
+        enc[verOffset + 1] = (byte)((packedUnityVerYear >> 8) & 0xf | 0x30);
+        enc[verOffset + 2] = (byte)((packedUnityVerYear >> 4) & 0xf | 0x30);
+        enc[verOffset + 3] = (byte)(packedUnityVerYear & 0xf | 0x30);
 
-        var crcInts = Enumerable.Range(0, 8).Select(x => BitConverter.ToUInt32(enc.AsSpan(encSectionOffset + x * 4, 4))).ToArray();
 
+        // Only required for version 3, though it doesn't break v1 since there this isnt obfuscated
+        enc[verOffset + 4] = 0x2e;
+        enc[verOffset + 4 + 2] = 0x2e;
+        if (enc[verOffset + 4 + 4] == verOffset)
+            enc[verOffset + 4 + 4] = 0x66; // f
+        if (enc[verOffset + 4 + 5] == verOffset)
+            enc[verOffset + 4 + 5] = 0x66; // f
+    }
+
+    private static void DecryptData(Span<byte> enc, int encSectionOffset)
+    {
+        var actualEncryptedLength = (uint)(enc.Length - encSectionOffset);
+
+        var crcInts = MemoryMarshal.Cast<byte, uint>(enc.Slice(encSectionOffset, 0x20)).ToArray();
         var crcBytes =
                 BitConverter.GetBytes(crcInts[3])
                 .Concat(BitConverter.GetBytes(crcInts[1]))
@@ -191,6 +195,10 @@ public class NeteaseLoader : IFileLoader
                 .ToArray();
 
         var crc = NeteaseCrc32.GetCrc32(crcBytes);
+
+        // Decrypt the CRC'ed area
+        for (int i = 0; i < 0x20; i++)
+            enc[encSectionOffset + i] ^= 0xa6;
 
         // It's a surprise tool that will help us later!
         uint[] crcKey = {
@@ -203,9 +211,8 @@ public class NeteaseLoader : IFileLoader
         var actualEncryptedOffset = encSectionOffset + 0x20;
         if (actualEncryptedLength > 0x9f)
         {
-            var keyBlock = new byte[0x80];
+            var keyBlock = enc.Slice(actualEncryptedOffset, 0x80).ToArray();
             var keyBlockInt = MemoryMarshal.Cast<byte, uint>(keyBlock);
-            Buffer.BlockCopy(enc, actualEncryptedOffset, keyBlock, 0, 0x80);
 
             NeteaseRc4.Decrypt(enc, actualEncryptedOffset, 0x80, BitConverter.GetBytes(crc));
 
@@ -243,7 +250,7 @@ public class NeteaseLoader : IFileLoader
                         _ => throw new UnreachableException()
                     };
 
-                    var currentBlockSpan = MemoryMarshal.Cast<byte, uint>(enc.AsSpan(currentBlockOffset, 0x80));
+                    var currentBlockSpan = MemoryMarshal.Cast<byte, uint>(enc.Slice(currentBlockOffset, 0x80));
 
                     for (int j = 0; j < 32; j++)
                     {
@@ -259,9 +266,9 @@ public class NeteaseLoader : IFileLoader
             if (remainingNonAligned > 0)
             {
                 var totalRemainingOffset = encSectionOffset + actualEncryptedLength - remainingNonAligned;
-                for (uint i = 0; i < remainingNonAligned; i++)
+                for (int i = 0; i < remainingNonAligned; i++)
                 {
-                    enc[totalRemainingOffset + i] ^= (byte)(i ^ keyBlock[i & 0x7f] ^ (byte)(keyTable2[crcKey[i & 3] % 9] + keyTable2[crcKey[i & 3] % 9] / 0xff));
+                    enc[(int)totalRemainingOffset + i] ^= (byte)(i ^ keyBlock[i & 0x7f] ^ (byte)(keyTable2[crcKey[i & 3] % 9] + keyTable2[crcKey[i & 3] % 9] / 0xff));
                 }
             }
         }
@@ -269,26 +276,6 @@ public class NeteaseLoader : IFileLoader
         {
             NeteaseRc4.Decrypt(enc, actualEncryptedOffset, (int)actualEncryptedLength - 0x20, BitConverter.GetBytes(crc));
         }
-
-        // Finally, fix up things that influenced the crc
-
-        // Unpack unity year back to 4 bytes (21 20 -> 2021)
-        enc[verOffset] = (byte)((packedUnityVerYear >> 12) & 0xf | 0x30);
-        enc[verOffset + 1] = (byte)((packedUnityVerYear >> 8) & 0xf | 0x30);
-        enc[verOffset + 2] = (byte)((packedUnityVerYear >> 4) & 0xf | 0x30);
-        enc[verOffset + 3] = (byte)(packedUnityVerYear & 0xf | 0x30);
-
-        // Fix other parts of version string
-        // Only required for version 3, though it doesn't break v1 since there this isnt obfuscated
-        enc[verOffset + 4] = 0x2e;
-        enc[verOffset + 4 + 2] = 0x2e;
-        if (enc[verOffset + 4 + 4] == verOffset)
-            enc[verOffset + 4 + 4] = 0x66; // f
-        if (enc[verOffset + 4 + 5] == verOffset)
-            enc[verOffset + 4 + 5] = 0x66; // f
-
-        for (int i = 0; i < 0x20; i++)
-            enc[encSectionOffset + i] ^= 0xa6;
     }
 
     private static class NeteaseCrc32
@@ -331,7 +318,7 @@ public class NeteaseLoader : IFileLoader
 
     private static class NeteaseRc4
     {
-        public static void Decrypt(byte[] data, int offset, int length, byte[] key)
+        public static void Decrypt(Span<byte> data, int offset, int length, Span<byte> key)
         {
             var kt = new byte[256];
             for (int i = 0; i < 256; i++)
