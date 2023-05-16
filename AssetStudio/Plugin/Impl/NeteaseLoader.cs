@@ -51,7 +51,7 @@ public class NeteaseLoader : IFileLoader
         var unityVer = reader.ReadStringToNull();
         var unityRev = reader.ReadStringToNull();
 
-        var headerSize = reader.ReadInt64();
+        var totalSize = reader.ReadInt64();
         var compressedBlocksInfoSize = reader.ReadUInt32();
         var uncompressedBlocksInfoSize = reader.ReadUInt32();
         var flags = (ArchiveFlags)reader.ReadUInt32();
@@ -168,16 +168,17 @@ public class NeteaseLoader : IFileLoader
         if (verOffset == -1)
             return;
 
-        int encSectionLength;
-        if (enc[verOffset + 4] == 0xaa && enc[verOffset + 4 + 2] == 0xbb)
+        // This check only works for version 3 of the encryption.
+        // We know the encrypted section length already, so this is skippable
+        /*if (enc[verOffset + 4] == 0xaa && enc[verOffset + 4 + 2] == 0xbb)
             encSectionLength = 0x1000;
         else
         {
             encSectionLength = enc[verOffset + 4] * 0x10 + enc[verOffset + 4 + 2];
-        }
+        }*/
 
         var encSectionOffset = (verOffset > 0x1f ? 0x10 : 0) + 0x30;
-        var actualEncryptedLength = (uint)encSectionLength - (uint)encSectionOffset;
+        var actualEncryptedLength = (uint)enc.Length - (uint)encSectionOffset;
 
         var crcInts = Enumerable.Range(0, 8).Select(x => BitConverter.ToUInt32(enc.AsSpan(encSectionOffset + x * 4, 4))).ToArray();
 
@@ -278,6 +279,7 @@ public class NeteaseLoader : IFileLoader
         enc[verOffset + 3] = (byte)(packedUnityVerYear & 0xf | 0x30);
 
         // Fix other parts of version string
+        // Only required for version 3, though it doesn't break v1 since there this isnt obfuscated
         enc[verOffset + 4] = 0x2e;
         enc[verOffset + 4 + 2] = 0x2e;
         if (enc[verOffset + 4 + 4] == verOffset)
