@@ -14,7 +14,16 @@ jobs:
       - uses: actions/checkout@v2
       - uses: microsoft/setup-msbuild@v1.1
       
-      - name: Download FBX SDK
+      - name: Cache FBX SDK
+        id: cache-fbxsdk
+        uses: actions/cache@v3
+        with:
+          path: C:\Program Files\Autodesk\FBX\FBX SDK\2020.2.1
+          key: ${{ runner.os }}-fbxsdk
+            
+
+      - if: ${{ steps.cache-fbxsdk.outputs.cache-hit != 'true' }}
+        name: Download FBX SDK
         run: |
           md fbx
           cd fbx
