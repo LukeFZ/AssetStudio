@@ -38,13 +38,20 @@ public class FairguardLoader : IFileLoader
 
     public bool CanProcessFile(Stream file, string filename)
     {
-        var encInfo = GetEncryptedBlockData(file);
-        if (encInfo == null)
+        try
+        {
+            var encInfo = GetEncryptedBlockData(file);
+            if (encInfo == null)
+                return false;
+
+            var (encData, _) = encInfo.Value;
+
+            return encData != null && CanBeDecrypted(encData);
+        } 
+        catch (Exception)
+        {
             return false;
-
-        var (encData, _) = encInfo.Value;
-
-        return encData != null && CanBeDecrypted(encData);
+        }
     }
 
     private static (byte[] encData, long encPos)? GetEncryptedBlockData(Stream file)

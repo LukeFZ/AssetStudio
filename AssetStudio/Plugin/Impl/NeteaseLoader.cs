@@ -31,13 +31,20 @@ public class NeteaseLoader : IFileLoader
 
     public bool CanProcessFile(Stream file, string filename)
     {
-        var encInfo = GetEncryptedBlockData(file);
-        if (encInfo == null)
+        try
+        {
+            var encInfo = GetEncryptedBlockData(file);
+            if (encInfo == null)
+                return false;
+
+            var (encData, _) = encInfo.Value;
+
+            return encData != null && (CanBeDecrypted1(encData) || GetObfuscatedVersionOffset(encData) != -1);
+        }
+        catch (Exception)
+        {
             return false;
-
-        var (encData, _) = encInfo.Value;
-
-        return encData != null && (CanBeDecrypted1(encData) || GetObfuscatedVersionOffset(encData) != -1);
+        }
     }
 
     private static (byte[] encData, long encPos)? GetEncryptedBlockData(Stream file)
@@ -214,10 +221,10 @@ public class NeteaseLoader : IFileLoader
             var keyBlock = enc.Slice(actualEncryptedOffset, 0x80).ToArray();
             var keyBlockInt = MemoryMarshal.Cast<byte, uint>(keyBlock);
 
-            NeteaseRc4.Decrypt(enc, actualEncryptedOffset, 0x80, BitConverter.GetBytes(crc));
+            NeteaseRc4.Decrypt(enc.Slice(actualEncryptedOffset, 0x80), BitConverter.GetBytes(crc));
 
             var rc4Key2 = BitConverter.GetBytes(crcKey[2]); // Not actually the array reference but the same value
-            NeteaseRc4.Decrypt(keyBlock, 0, 0x80, rc4Key2); // Because it was so fun the first time
+            NeteaseRc4.Decrypt(keyBlock, rc4Key2); // Because it was so fun the first time
 
             uint[] keyTable2 =
             {
@@ -268,17 +275,17 @@ public class NeteaseLoader : IFileLoader
                 var totalRemainingOffset = encSectionOffset + actualEncryptedLength - remainingNonAligned;
                 for (int i = 0; i < remainingNonAligned; i++)
                 {
-                    enc[(int)totalRemainingOffset + i] ^= (byte)(i ^ keyBlock[i & 0x7f] ^ (byte)(keyTable2[crcKey[i & 3] % 9] + keyTable2[crcKey[i & 3] % 9] / 0xff));
+                    enc[(int)totalRemainingOffset + i] ^= (byte)(i ^ keyBlock[i & 0x7f] ^ (byte)(keyTable2[crcKey[i & 3] % 9] % 0xff));
                 }
             }
         }
         else
         {
-            NeteaseRc4.Decrypt(enc, actualEncryptedOffset, (int)actualEncryptedLength - 0x20, BitConverter.GetBytes(crc));
+            NeteaseRc4.Decrypt(enc.Slice(actualEncryptedOffset, (int)actualEncryptedLength - 0x20), BitConverter.GetBytes(crc));
         }
     }
 
-    private static class NeteaseCrc32
+    public static class NeteaseCrc32
     {
         private static readonly uint[] Lookup = new uint[256];
 
@@ -316,9 +323,23 @@ public class NeteaseLoader : IFileLoader
         }
     }
 
-    private static class NeteaseRc4
+    public class NeteaseRc4
     {
-        public static void Decrypt(Span<byte> data, int offset, int length, Span<byte> key)
+        private readonly byte _add;
+        private readonly bool _rotateRight;
+
+        private static readonly NeteaseRc4 Instance = new();
+
+        public static void Decrypt(Span<byte> data, Span<byte> key)
+            => Instance.DecryptSpan(data, key);
+
+        public NeteaseRc4(byte add = 0x3a, bool rotateRight = false)
+        {
+            _add = add;
+            _rotateRight = rotateRight;
+        }
+
+        public void DecryptSpan(Span<byte> data, Span<byte> key)
         {
             var kt = new byte[256];
             for (int i = 0; i < 256; i++)
@@ -340,10 +361,10 @@ public class NeteaseLoader : IFileLoader
                 kt[swap] = a;
             }
 
-            if (length > 0)
+            if (data.Length > 0)
             {
                 byte j = 0, k = 0;
-                for (int i = 0; i < length; i++)
+                for (int i = 0; i < data.Length; i++)
                 {
                     j++;
                     var a = kt[j];
@@ -351,9 +372,9 @@ public class NeteaseLoader : IFileLoader
                     kt[j] = kt[k];
                     kt[k] = a;
 
-                    uint kb = kt[(byte) (a + kt[j])];
-                    var rot = (byte)((kb << 6) | (kb >> 2));
-                    data[offset + i] ^= (byte) (rot + 0x3a);
+                    uint kb = kt[(byte)(a + kt[j])];
+                    var rot = _rotateRight ? (byte)((kb >> 6) | (kb << 2)) : (byte)((kb << 6) | (kb >> 2));
+                    data[i] ^= (byte)(rot + _add);
                 }
             }
         }
