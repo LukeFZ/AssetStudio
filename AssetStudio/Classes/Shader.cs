@@ -688,9 +688,39 @@ namespace AssetStudio
         }
     }
 
+    public class SerializedPlayerSubProgram
+    {
+        public uint m_BlobIndex;
+        public ushort[] m_KeywordIndices;
+        public long m_ShaderRequirements;
+        public ShaderGpuProgramType m_GpuProgramType;
+
+        public SerializedPlayerSubProgram(ObjectReader reader)
+        {
+            m_BlobIndex = reader.ReadUInt32();
+
+            int numKeywordIndices = reader.ReadInt32();
+            m_KeywordIndices = new ushort[numKeywordIndices];
+            for (int i = 0; i < numKeywordIndices; i++)
+            {
+                m_KeywordIndices[i] = reader.ReadUInt16();
+            }
+
+            reader.AlignStream();
+
+            m_ShaderRequirements = reader.ReadInt64();
+            m_GpuProgramType = (ShaderGpuProgramType)reader.ReadSByte();
+            
+            reader.AlignStream();
+        }
+    }
+
     public class SerializedProgram
     {
         public SerializedSubProgram[] m_SubPrograms;
+        public SerializedPlayerSubProgram[][] m_PlayerSubPrograms;
+        public uint[][] m_ParameterBlobIndices;
+
         public SerializedProgramParameters m_CommonParameters;
         public ushort[] m_SerializedKeywordStateMask;
 
@@ -703,6 +733,43 @@ namespace AssetStudio
             for (int i = 0; i < numSubPrograms; i++)
             {
                 m_SubPrograms[i] = new SerializedSubProgram(reader);
+            }
+
+            if ((version[0] > 2021) ||
+                (version[0] == 2021 && version[1] > 1) ||
+                (version[0] == 2021 && version[1] == 1 && version[2] >= 13))
+            {
+                int numSubProgramTiers = reader.ReadInt32();
+                m_PlayerSubPrograms = new SerializedPlayerSubProgram[numSubProgramTiers][];
+                for (int i = 0; i < numSubProgramTiers; i++)
+                {
+                    int numTierSubPrograms = reader.ReadInt32();
+                    m_PlayerSubPrograms[i] = new SerializedPlayerSubProgram[numTierSubPrograms];
+                    for (int j = 0; j < numTierSubPrograms; j++)
+                    {
+                        m_PlayerSubPrograms[i][j] = new SerializedPlayerSubProgram(reader);
+                    }
+
+                    reader.AlignStream();
+                }
+
+                reader.AlignStream();
+
+                int numParameterBlobIndexTiers = reader.ReadInt32();
+                m_ParameterBlobIndices = new uint[numParameterBlobIndexTiers][];
+                for (int i = 0; i < numParameterBlobIndexTiers; i++)
+                {
+                    int numParameterBlobIndices = reader.ReadInt32();
+                    m_ParameterBlobIndices[i] = new uint[numParameterBlobIndices];
+                    for (int j = 0; j < numParameterBlobIndices; j++)
+                    {
+                        m_ParameterBlobIndices[i][j] = reader.ReadUInt32();
+                    }
+
+                    reader.AlignStream();
+                }
+
+                reader.AlignStream();
             }
 
             if ((version[0] == 2020 && version[1] > 3) ||
@@ -974,6 +1041,7 @@ namespace AssetStudio
         public uint[][] compressedLengths;
         public uint[][] decompressedLengths;
         public byte[] compressedBlob;
+        public uint[] stageCounts;
 
         public Shader(ObjectReader reader) : base(reader)
         {
@@ -996,11 +1064,21 @@ namespace AssetStudio
                 compressedBlob = reader.ReadUInt8Array();
                 reader.AlignStream();
 
+                if (version[0] >= 2021
+                    || (version[0] == 2021 && (version[1] > 3 || (version[1] == 3 || version[2] >= 21))))
+                {
+                    stageCounts = reader.ReadUInt32Array();
+
+                    reader.AlignStream();
+                }
+
                 var m_DependenciesCount = reader.ReadInt32();
                 for (int i = 0; i < m_DependenciesCount; i++)
                 {
                     new PPtr<Shader>(reader);
                 }
+
+                reader.AlignStream();
 
                 if (version[0] >= 2018)
                 {
@@ -1010,6 +1088,8 @@ namespace AssetStudio
                         var first = reader.ReadAlignedString();
                         new PPtr<Texture>(reader);
                     }
+
+                    reader.AlignStream();
                 }
 
                 var m_ShaderIsBaked = reader.ReadBoolean();
