@@ -1,17 +1,13 @@
 ﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System;
 using K4os.Compression.LZ4;
 using System.IO;
 
 namespace AssetStudio.Plugin.Impl;
 
-file static class SpanExtensions
+file static class Extensions
 {
     [DebuggerStepThrough] public static byte RotateLeft(this byte val, int count) => (byte)((val << count) | (val >> (8 - count)));
-    [DebuggerStepThrough] public static Span<T> As<T>(this Span<byte> val) where T : struct => MemoryMarshal.Cast<byte, T>(val);
-    [DebuggerStepThrough] public static Span<byte> AsBytes<T>(this Span<T> val) where T : struct => MemoryMarshal.Cast<T, byte>(val);
-    [DebuggerStepThrough] public static ReadOnlySpan<T> As<T>(this ReadOnlySpan<byte> val) where T : struct => MemoryMarshal.Cast<byte, T>(val);
 }
 
 public class FairguardLoader : IFileLoader

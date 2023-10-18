@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 
@@ -160,6 +161,20 @@ namespace AssetStudio
         public static Matrix4x4[] ReadMatrixArray(this BinaryReader reader)
         {
             return ReadArray(reader.ReadMatrix, reader.ReadInt32());
+        }
+
+        public static bool CheckedRead(this BinaryReader stream, Span<byte> data)
+        {
+            var read = stream.Read(data);
+            Debug.Assert(read == data.Length, "read == data.Length");
+            return read == data.Length;
+        }
+
+        public static bool CheckedRead(this BinaryReader stream, byte[] data)
+        {
+            var read = stream.Read(data);
+            Debug.Assert(read == data.Length, "read == data.Length");
+            return read == data.Length;
         }
     }
 }

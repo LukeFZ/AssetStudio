@@ -30,7 +30,7 @@ public class NarutoLoader : IFileLoader
         var ulongCount = blocks.Length / 8;
         for (int i = 0; i < ulongCount; i++)
         {
-            MemoryMarshal.Cast<byte, ulong>(encSpan)[i] ^= MemoryMarshal.Cast<byte, ulong>(key)[i % 8];
+            encSpan.As<ulong>()[i] ^= key.As<ulong>()[i % 8];
         }
 
         var rem = blocks.Length - ulongCount * 8;
@@ -62,22 +62,5 @@ public class NarutoLoader : IFileLoader
     {
         var reader = new EndianBinaryReader(file);
         return reader.ReadStringToNull(9) == "UnityKHFS";
-    }
-}
-
-public static class Extensions 
-{
-    public static bool CheckedRead(this Stream stream, Span<byte> data)
-    {
-        var read = stream.Read(data);
-        Debug.Assert(read == data.Length, "read == data.Length");
-        return read == data.Length;
-    }
-
-    public static bool CheckedRead(this Stream stream, byte[] data)
-    {
-        var read = stream.Read(data);
-        Debug.Assert(read == data.Length, "read == data.Length");
-        return read == data.Length;
     }
 }

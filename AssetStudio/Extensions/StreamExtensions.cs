@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using System.Diagnostics;
+using System;
+using System.IO;
 
 namespace AssetStudio
 {
@@ -17,6 +19,39 @@ namespace AssetStudio
                 if (read != toRead)
                 {
                     return;
+                }
+            }
+        }
+
+        public static bool CheckedRead(this Stream stream, Span<byte> data)
+        {
+            var read = stream.Read(data);
+            Debug.Assert(read == data.Length, "read == data.Length");
+            return read == data.Length;
+        }
+
+        public static bool CheckedRead(this Stream stream, byte[] data)
+        {
+            var read = stream.Read(data);
+            Debug.Assert(read == data.Length, "read == data.Length");
+            return read == data.Length;
+        }
+
+        public static void AlignStream(this Stream stream, int alignment, bool write = false)
+        {
+            var pos = stream.Position;
+            var mod = pos % alignment;
+            if (mod != 0)
+            {
+                var cnt = alignment - mod;
+
+                if (write)
+                {
+                    stream.Write(new byte[cnt]);
+                }
+                else
+                {
+                    stream.Position += cnt;
                 }
             }
         }

@@ -61,18 +61,14 @@ namespace AssetStudio
         }
 
         public Header m_Header;
-        private StorageBlock[] m_BlocksInfo;
-        private Node[] m_DirectoryInfo;
+        public StorageBlock[] m_BlocksInfo;
+        public Node[] m_DirectoryInfo;
 
         public StreamFile[] fileList;
 
         public BundleFile(FileReader reader)
         {
-            m_Header = new Header();
-            m_Header.signature = reader.ReadStringToNull();
-            m_Header.version = reader.ReadUInt32();
-            m_Header.unityVersion = reader.ReadStringToNull();
-            m_Header.unityRevision = reader.ReadStringToNull();
+            Initialize(reader);
 
             switch (m_Header.signature)
             {
@@ -101,6 +97,20 @@ namespace AssetStudio
                     }
                     break;
             }
+        }
+
+        public BundleFile()
+        {
+
+        }
+
+        public void Initialize(EndianBinaryReader reader)
+        {
+            m_Header = new Header();
+            m_Header.signature = reader.ReadStringToNull();
+            m_Header.version = reader.ReadUInt32();
+            m_Header.unityVersion = reader.ReadStringToNull();
+            m_Header.unityRevision = reader.ReadStringToNull();
         }
 
         private void ReadHeaderAndBlocksInfo(EndianBinaryReader reader)
@@ -216,7 +226,7 @@ namespace AssetStudio
             }
         }
 
-        private void ReadHeader(EndianBinaryReader reader)
+        public void ReadHeader(EndianBinaryReader reader)
         {
             m_Header.size = reader.ReadInt64();
             m_Header.compressedBlocksInfoSize = reader.ReadUInt32();
@@ -228,7 +238,7 @@ namespace AssetStudio
             }
         }
 
-        private void ReadBlocksInfoAndDirectory(EndianBinaryReader reader)
+        public void ReadBlocksInfoAndDirectory(EndianBinaryReader reader)
         {
             byte[] blocksInfoBytes;
             if (m_Header.version >= 7)
