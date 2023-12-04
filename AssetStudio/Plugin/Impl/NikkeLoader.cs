@@ -3,9 +3,9 @@ using System.Security.Cryptography;
 
 namespace AssetStudio.Plugin.Impl;
 
-public class NikkeLoader : IFileLoader
+public class NikkeLoader : FileLoader
 {
-    public Stream ProcessFile(Stream file, string filename)
+    public override Stream ProcessFile(Stream file, string filename)
     {
         var reader = new EndianBinaryReader(file, EndianType.LittleEndian);
         var sig = reader.ReadStringToNull(4);
@@ -34,7 +34,7 @@ public class NikkeLoader : IFileLoader
         return memStream;
     }
 
-    public bool CanProcessFile(Stream file, string filename)
+    public override bool CanProcessFile(Stream file, string filename)
     {
         if (file.Length < 8) return false;
 

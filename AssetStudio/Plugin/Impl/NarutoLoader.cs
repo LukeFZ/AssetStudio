@@ -5,9 +5,9 @@ using System.Runtime.InteropServices;
 
 namespace AssetStudio.Plugin.Impl;
 
-public class NarutoLoader : IFileLoader
+public class NarutoLoader : FileLoader
 {
-    public Stream ProcessFile(Stream file, string filename)
+    public override Stream ProcessFile(Stream file, string filename)
     {
         file.Seek(9, SeekOrigin.Current);
         var headerData = (stackalloc byte[0x1f]);
@@ -16,7 +16,7 @@ public class NarutoLoader : IFileLoader
         var blocksSizeBytes = (stackalloc byte[0xc]);
         file.CheckedRead(blocksSizeBytes);
 
-        var blocksSize = blocksSizeBytes[3] | (blocksSizeBytes[2] << 8) | (blocksSizeBytes[1] << 16) | (blocksSizeBytes[0] << 24);
+        var blocksSize = blocksSizeBytes.As<uint>()[0];
 
         file.Seek(0xc, SeekOrigin.Current);
 
@@ -55,10 +55,12 @@ public class NarutoLoader : IFileLoader
 
         ms.Seek(0, SeekOrigin.Begin);
 
+        File.WriteAllBytes(filename + ".decrypted", ms.ToArray());
+
         return ms;
     }
 
-    public bool CanProcessFile(Stream file, string filename)
+    public override bool CanProcessFile(Stream file, string filename)
     {
         var reader = new EndianBinaryReader(file);
         return reader.ReadStringToNull(9) == "UnityKHFS";

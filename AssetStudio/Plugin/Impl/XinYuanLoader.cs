@@ -6,9 +6,9 @@ using System.Text;
 
 namespace AssetStudio.Plugin.Impl;
 
-public class XinYuanLoader : IFileLoader
+public class XinYuanLoader : FileLoader
 {
-    public Stream ProcessFile(Stream file, string filename)
+    public override Stream ProcessFile(Stream file, string filename)
     {
         file.Seek(7, SeekOrigin.Begin);
 
@@ -52,7 +52,7 @@ public class XinYuanLoader : IFileLoader
         return decryptedStream;
     }
 
-    public bool CanProcessFile(Stream file, string filename)
+    public override bool CanProcessFile(Stream file, string filename)
     {
         var magic = (stackalloc byte[7]);
         return file.Read(magic) == 7 && Encoding.UTF8.GetString(magic) == "XINYUAN";

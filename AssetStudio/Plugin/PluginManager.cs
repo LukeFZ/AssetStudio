@@ -19,7 +19,9 @@ namespace AssetStudio.Plugin
             foreach (var type in Assembly
                          .GetCallingAssembly()
                          .GetTypes()
-                         .Where(type => type
+                         .Where(type =>
+                             !type.IsAbstract &&
+                             type
                              .GetInterfaces()
                              .Contains(typeof(IFileLoader)))) {
                 try
@@ -31,6 +33,8 @@ namespace AssetStudio.Plugin
                     failedPlugins.Add(type.Name);
                 }
             }
+
+            RegisteredFileLoaders.Sort((x, y) => y.Priority.CompareTo(x.Priority));
 
             _isLoaded = true;
 

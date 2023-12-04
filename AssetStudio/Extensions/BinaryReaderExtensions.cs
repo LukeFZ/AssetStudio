@@ -170,11 +170,11 @@ namespace AssetStudio
             return read == data.Length;
         }
 
-        public static bool CheckedRead(this BinaryReader stream, byte[] data)
+        public static bool CheckedRead(this BinaryReader stream, byte[] data, int index, int count)
         {
-            var read = stream.Read(data);
-            Debug.Assert(read == data.Length, "read == data.Length");
-            return read == data.Length;
+            var read = stream.Read(data, index, count);
+            Debug.Assert(read == count, "read == count");
+            return read == count;
         }
     }
 }

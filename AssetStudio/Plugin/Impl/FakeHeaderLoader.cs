@@ -1,19 +1,22 @@
 ﻿using System;
 using System.Buffers;
 using System.IO;
+using AssetStudio.Plugin.Streams;
 
 namespace AssetStudio.Plugin.Impl;
 
 // JewelPriLoader
-public class FakeHeaderLoader : IFileLoader
+public class FakeHeaderLoader : FileLoader
 {
-    public Stream ProcessFile(Stream file, string filename)
+    public override int Priority => 10;
+
+    public override Stream ProcessFile(Stream file, string filename)
     {
         var offset = FindOffset(file);
         return new OffsetStream(file, offset);
     }
 
-    public bool CanProcessFile(Stream file, string filename)
+    public override bool CanProcessFile(Stream file, string filename)
     {
         if (file.Length < 8) return false;
         return FindOffset(file) != -1;

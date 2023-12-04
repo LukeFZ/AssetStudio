@@ -7,9 +7,9 @@ using System.Runtime.InteropServices;
 
 namespace AssetStudio.Plugin.Impl;
 
-public class NeteaseLoader : IFileLoader
+public class NeteaseLoader : FileLoader
 {
-    public Stream ProcessFile(Stream file, string filename)
+    public override Stream ProcessFile(Stream file, string filename)
     {
         var encInfo = GetEncryptedBlockData(file);
         if (encInfo == null)
@@ -29,7 +29,7 @@ public class NeteaseLoader : IFileLoader
         return ms;
     }
 
-    public bool CanProcessFile(Stream file, string filename)
+    public override bool CanProcessFile(Stream file, string filename)
     {
         try
         {

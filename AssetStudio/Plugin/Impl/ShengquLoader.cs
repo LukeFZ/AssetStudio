@@ -28,16 +28,16 @@ file static class Extensions
     };
 }
 
-public class ShengquLoader : IFileLoader
+public class ShengquLoader : FileLoader
 {
-    public bool CanProcessFile(Stream file, string filename)
+    public override bool CanProcessFile(Stream file, string filename)
     {
         var reader = new EndianBinaryReader(file);
         var hdr = reader.ReadStringToNull();
         return hdr == "SQGDNFS";
     }
 
-    public Stream ProcessFile(Stream file, string filename)
+    public override Stream ProcessFile(Stream file, string filename)
     {
         var reader = new EndianBinaryReader(file);
         reader.ReadStringToNull();
@@ -99,9 +99,6 @@ public class ShengquLoader : IFileLoader
         bundle.Initialize(bundleReader);
         bundle.ReadHeader(bundleReader);
         bundle.ReadBlocksInfoAndDirectory(bundleReader);
-
-        if (((ArchiveFlags) flags & ArchiveFlags.BlockInfoNeedPaddingAtStart) != 0)
-            file.AlignStream(16);
 
         for (int i = 0; i < bundle.m_BlocksInfo.Length; i++)
         {

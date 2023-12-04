@@ -6,10 +6,10 @@ using System.Text;
 
 namespace AssetStudio.Plugin.Impl;
 
-public class HoloearthLoader : IFileLoader
+public class HoloearthLoader : FileLoader
 {
 
-    public Stream ProcessFile(Stream file, string filename)
+    public override Stream ProcessFile(Stream file, string filename)
     {
         var name = Path.GetFileNameWithoutExtension(filename);
         var ext = Path.GetExtension(filename);
@@ -33,7 +33,7 @@ public class HoloearthLoader : IFileLoader
         throw new Exception();
     }
 
-    public bool CanProcessFile(Stream file, string filename)
+    public override bool CanProcessFile(Stream file, string filename)
     {
         using var aes = Aes.Create();
         aes.Mode = CipherMode.ECB;

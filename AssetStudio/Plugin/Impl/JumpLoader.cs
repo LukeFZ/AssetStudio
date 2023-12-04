@@ -4,9 +4,9 @@ using System.IO;
 
 namespace AssetStudio.Plugin.Impl;
 
-public class JumpLoader : IFileLoader
+public class JumpLoader : FileLoader
 {
-    public Stream ProcessFile(Stream file, string filename)
+    public override Stream ProcessFile(Stream file, string filename)
     {
         var buffer = new byte[file.Length];
         file.CheckedRead(buffer);
@@ -36,7 +36,7 @@ public class JumpLoader : IFileLoader
         return new MemoryStream(buffer);
     }
 
-    public bool CanProcessFile(Stream file, string filename)
+    public override bool CanProcessFile(Stream file, string filename)
     {
         var buffer = (stackalloc byte[8]);
         file.CheckedRead(buffer);
