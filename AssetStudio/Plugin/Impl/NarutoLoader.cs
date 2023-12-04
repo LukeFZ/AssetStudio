@@ -1,7 +1,6 @@
 ﻿using System;
-using System.Diagnostics;
+using System.Buffers.Binary;
 using System.IO;
-using System.Runtime.InteropServices;
 
 namespace AssetStudio.Plugin.Impl;
 
@@ -16,7 +15,7 @@ public class NarutoLoader : FileLoader
         var blocksSizeBytes = (stackalloc byte[0xc]);
         file.CheckedRead(blocksSizeBytes);
 
-        var blocksSize = blocksSizeBytes.As<uint>()[0];
+        var blocksSize = BinaryPrimitives.ReadUInt32BigEndian(blocksSizeBytes);
 
         file.Seek(0xc, SeekOrigin.Current);
 
