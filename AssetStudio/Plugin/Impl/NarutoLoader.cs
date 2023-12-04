@@ -55,8 +55,6 @@ public class NarutoLoader : FileLoader
 
         ms.Seek(0, SeekOrigin.Begin);
 
-        File.WriteAllBytes(filename + ".decrypted", ms.ToArray());
-
         return ms;
     }
 
