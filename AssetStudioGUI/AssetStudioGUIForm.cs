@@ -115,7 +115,7 @@ namespace AssetStudioGUI
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
-                e.Effect = DragDropEffects.Move;
+                e.Effect = DragDropEffects.Copy;
             }
         }
 
