@@ -9,6 +9,7 @@ namespace AssetStudio
         public string FullPath;
         public string FileName;
         public FileType FileType;
+        public IFileLoader Loader;
 
         private static readonly byte[] gzipMagic = { 0x1f, 0x8b };
         private static readonly byte[] brotliMagic = { 0x62, 0x72, 0x6F, 0x74, 0x6C, 0x69 };
@@ -17,15 +18,16 @@ namespace AssetStudio
 
         public FileReader(string path) : this(path, File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) { }
 
-        public FileReader(string path, Stream stream) : base(LoadFile(stream, path), EndianType.BigEndian)
+        public FileReader(string path, Stream stream) : base(LoadFile(stream, path, out var loader), EndianType.BigEndian)
         {
+            Loader = loader;
             FullPath = Path.GetFullPath(path);
             FileName = Path.GetFileName(path);
             FileType = CheckFileType();
         }
 
-        private static Stream LoadFile(Stream stream, string path)
-            => PluginManager.ParseFileUsingPlugin(stream, path) ?? stream;
+        private static Stream LoadFile(Stream stream, string path, out IFileLoader validLoader)
+            => PluginManager.ParseFileUsingPlugin(stream, path, out validLoader) ?? stream;
 
         private FileType CheckFileType()
         {

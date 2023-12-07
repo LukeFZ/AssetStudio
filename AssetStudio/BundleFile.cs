@@ -47,8 +47,8 @@ namespace AssetStudio
 
         public class StorageBlock
         {
-            public uint compressedSize;
             public uint uncompressedSize;
+            public uint compressedSize;
             public StorageBlockFlags flags;
         }
 
@@ -66,7 +66,14 @@ namespace AssetStudio
 
         public StreamFile[] fileList;
 
-        public BundleFile(FileReader reader)
+        public static BundleFile Create(FileReader reader)
+        {
+            return reader.Loader is {ReturnsBundleFile: true} 
+                ? reader.Loader.ProcessBundle(reader) 
+                : new BundleFile(reader);
+        }
+
+        private BundleFile(FileReader reader)
         {
             Initialize(reader);
 
@@ -113,7 +120,7 @@ namespace AssetStudio
             m_Header.unityRevision = reader.ReadStringToNull();
         }
 
-        private void ReadHeaderAndBlocksInfo(EndianBinaryReader reader)
+        public void ReadHeaderAndBlocksInfo(EndianBinaryReader reader)
         {
             if (m_Header.version >= 4)
             {
@@ -148,7 +155,7 @@ namespace AssetStudio
             reader.Position = m_Header.size;
         }
 
-        private Stream CreateBlocksStream(string path)
+        public Stream CreateBlocksStream(string path)
         {
             Stream blocksStream;
             var uncompressedSizeSum = m_BlocksInfo.Sum(x => x.uncompressedSize);
@@ -165,7 +172,7 @@ namespace AssetStudio
             return blocksStream;
         }
 
-        private void ReadBlocksAndDirectory(EndianBinaryReader reader, Stream blocksStream)
+        public void ReadBlocksAndDirectory(EndianBinaryReader reader, Stream blocksStream)
         {
             var isCompressed = m_Header.signature == "UnityWeb";
             foreach (var blockInfo in m_BlocksInfo)
@@ -325,7 +332,7 @@ namespace AssetStudio
             }
         }
 
-        private void ReadBlocks(EndianBinaryReader reader, Stream blocksStream)
+        public void ReadBlocks(EndianBinaryReader reader, Stream blocksStream)
         {
             foreach (var blockInfo in m_BlocksInfo)
             {

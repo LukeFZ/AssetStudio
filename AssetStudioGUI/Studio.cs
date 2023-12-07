@@ -85,7 +85,7 @@ namespace AssetStudioGUI
         private static int ExtractBundleFile(FileReader reader, string savePath)
         {
             StatusStripUpdate($"Decompressing {reader.FileName} ...");
-            var bundleFile = new BundleFile(reader);
+            var bundleFile = BundleFile.Create(reader);
             reader.Dispose();
             if (bundleFile.fileList.Length > 0)
             {

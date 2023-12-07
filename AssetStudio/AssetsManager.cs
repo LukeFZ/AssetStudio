@@ -226,7 +226,7 @@ namespace AssetStudio
             Logger.Info("Loading " + reader.FullPath);
             try
             {
-                var bundleFile = new BundleFile(reader);
+                var bundleFile = BundleFile.Create(reader);
                 foreach (var file in bundleFile.fileList)
                 {
                     var dummyPath = Path.Combine(Path.GetDirectoryName(reader.FullPath), file.fileName);

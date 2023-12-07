@@ -41,8 +41,10 @@ namespace AssetStudio.Plugin
             return failedPlugins;
         }
 
-        public static Stream ParseFileUsingPlugin(Stream fileStream, string path)
+        public static Stream ParseFileUsingPlugin(Stream fileStream, string path, out IFileLoader validLoader)
         {
+            validLoader = null;
+
             if (fileStream.Position >= fileStream.Length)
                 return null;
 
@@ -53,6 +55,7 @@ namespace AssetStudio.Plugin
             {
                 if (loader.CanProcessFile(fileStream, path))
                 {
+                    validLoader = loader;
                     fileStream.Seek(0, SeekOrigin.Begin);
                     return loader.ProcessFile(fileStream, path);
                 }
