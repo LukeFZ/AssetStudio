@@ -256,7 +256,7 @@ namespace AssetStudio
             {
                 var temp = (stackalloc byte[(int)(16 - reader.Position % 16)]);
                 reader.CheckedRead(temp);
-                if (temp.IndexOfAnyExcept(byte.MinValue) != -1)
+                if (temp.IndexOfAnyExcept(byte.MinValue) == -1)
                     reader.Position -= temp.Length;
             }
             if ((m_Header.flags & ArchiveFlags.BlocksInfoAtTheEnd) != 0)
