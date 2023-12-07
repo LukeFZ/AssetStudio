@@ -252,6 +252,13 @@ namespace AssetStudio
             {
                 reader.AlignStream(16);
             }
+            else
+            {
+                var temp = (stackalloc byte[(int)(16 - reader.Position % 16)]);
+                reader.CheckedRead(temp);
+                if (temp.IndexOfAnyExcept(byte.MinValue) != -1)
+                    reader.Position -= temp.Length;
+            }
             if ((m_Header.flags & ArchiveFlags.BlocksInfoAtTheEnd) != 0)
             {
                 var position = reader.Position;

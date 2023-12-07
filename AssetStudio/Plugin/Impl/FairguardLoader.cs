@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics;
 using System;
-using K4os.Compression.LZ4;
 using System.IO;
 
 namespace AssetStudio.Plugin.Impl;
@@ -53,60 +52,19 @@ public class FairguardLoader : FileLoader
     private static (byte[] encData, long encPos)? GetEncryptedBlockData(Stream file)
     {
         var reader = new EndianBinaryReader(file);
-        var unityFs = reader.ReadStringToNull();
-        if (unityFs != "UnityFS")
+        var bundle = new BundleFile();
+        bundle.Initialize(reader);
+        if (bundle.m_Header.signature != "UnityFS")
             return null;
 
-        var version = reader.ReadUInt32();
-        var unityVer = reader.ReadStringToNull();
-        var unityRev = reader.ReadStringToNull();
-
-        var totalSize = reader.ReadInt64();
-        var compressedBlocksInfoSize = reader.ReadUInt32();
-        var uncompressedBlocksInfoSize = reader.ReadUInt32();
-        var flags = (ArchiveFlags)reader.ReadUInt32();
-        if (version >= 7)
-        {
-            reader.AlignStream(16);
-        }
-
-        var compressionType = (CompressionType)(flags & ArchiveFlags.CompressionTypeMask);
-        if (compressionType != CompressionType.None && compressionType != CompressionType.Lz4HC)
-        {
-            // Not supported by netease
+        bundle.ReadHeader(reader);
+        bundle.ReadBlocksInfoAndDirectory(reader);
+        if (bundle.m_BlocksInfo.Length == 0)
             return null;
-        }
 
-        var blocksInfo = reader.ReadBytes((int)compressedBlocksInfoSize);
+        var firstBlock = bundle.m_BlocksInfo[0];
 
-        Stream blocksInfoStream;
-        if (compressionType == CompressionType.Lz4HC)
-        {
-            var uncompressedBytes = new byte[uncompressedBlocksInfoSize];
-            var numWrite = LZ4Codec.Decode(blocksInfo, uncompressedBytes);
-            if (numWrite != uncompressedBlocksInfoSize)
-            {
-                throw new IOException($"Lz4 decompression error, write {numWrite} bytes but expected {uncompressedBlocksInfoSize} bytes");
-            }
-            blocksInfoStream = new MemoryStream(uncompressedBytes);
-        }
-        else
-        {
-            blocksInfoStream = new MemoryStream(blocksInfo);
-        }
-
-        using var blockInfoReader = new EndianBinaryReader(blocksInfoStream);
-        blockInfoReader.ReadBytes(16);
-        var blockCount = blockInfoReader.ReadInt32();
-        var uncompressedBlockSize = blockInfoReader.ReadUInt32();
-        var compressedBlockSize = blockInfoReader.ReadUInt32();
-
-        if ((flags & ArchiveFlags.BlockInfoNeedPaddingAtStart) != 0)
-        {
-            reader.AlignStream(16);
-        }
-
-        var encBlockSize = compressedBlockSize < 0x500 ? compressedBlockSize : 0x500;
+        var encBlockSize = firstBlock.compressedSize < 0x500 ? firstBlock.compressedSize : 0x500;
         var encPos = reader.Position;
         return (reader.ReadBytes((int)encBlockSize), encPos);
     }
