@@ -252,11 +252,11 @@ namespace AssetStudio
             {
                 reader.AlignStream(16);
             }
-            else
+            else if (m_Header.version == 6) // Some recompiled Unity versions based on 2019.4.30 have the alignment set before version 7
             {
                 var temp = (stackalloc byte[(int)(16 - reader.Position % 16)]);
                 reader.CheckedRead(temp);
-                if (temp.IndexOfAnyExcept(byte.MinValue) == -1)
+                if (temp.IndexOfAnyExcept(byte.MinValue) != -1)
                     reader.Position -= temp.Length;
             }
             if ((m_Header.flags & ArchiveFlags.BlocksInfoAtTheEnd) != 0)
