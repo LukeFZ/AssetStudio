@@ -73,7 +73,7 @@ namespace AssetStudio
                 : new BundleFile(reader);
         }
 
-        private BundleFile(FileReader reader)
+        private BundleFile(FileReader reader) : this()
         {
             Initialize(reader);
 
