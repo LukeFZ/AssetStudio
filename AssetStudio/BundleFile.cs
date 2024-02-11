@@ -108,12 +108,11 @@ namespace AssetStudio
 
         public BundleFile()
         {
-
+            m_Header = new Header();
         }
 
         public void Initialize(EndianBinaryReader reader)
         {
-            m_Header = new Header();
             m_Header.signature = reader.ReadStringToNull();
             m_Header.version = reader.ReadUInt32();
             m_Header.unityVersion = reader.ReadStringToNull();
@@ -245,7 +244,7 @@ namespace AssetStudio
             }
         }
 
-        public void ReadBlocksInfoAndDirectory(EndianBinaryReader reader)
+        public void ReadBlocksInfoAndDirectory(EndianBinaryReader reader, Action<byte[]>? preDecompressionCallback = null)
         {
             byte[] blocksInfoBytes;
             if (m_Header.version >= 7)
@@ -273,6 +272,9 @@ namespace AssetStudio
             MemoryStream blocksInfoUncompresseddStream;
             var uncompressedSize = m_Header.uncompressedBlocksInfoSize;
             var compressionType = (CompressionType)(m_Header.flags & ArchiveFlags.CompressionTypeMask);
+
+            preDecompressionCallback?.Invoke(blocksInfoBytes);
+
             switch (compressionType)
             {
                 case CompressionType.None:

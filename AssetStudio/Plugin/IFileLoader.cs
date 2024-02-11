@@ -17,7 +17,7 @@ namespace AssetStudio.Plugin
         public virtual int Priority => 100;
         public virtual bool ReturnsBundleFile => false;
 
-        public virtual Stream ProcessFile(Stream file, string filename) => throw new NotImplementedException();
+        public virtual Stream ProcessFile(Stream file, string filename) => file;
         public virtual BundleFile ProcessBundle(FileReader reader) => throw new NotImplementedException();
         public abstract bool CanProcessFile(Stream file, string filename);
     }
