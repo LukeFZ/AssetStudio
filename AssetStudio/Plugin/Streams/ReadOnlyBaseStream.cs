@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
 namespace AssetStudio.Plugin.Streams;
 
@@ -23,4 +24,7 @@ public abstract class ReadOnlyBaseStream : NonWritableStream
         get => _stream.Position;
         set => _stream.Position = value;
     }
+
+    public override int Read(byte[] buffer, int offset, int count)
+        => Read(buffer.AsSpan(offset, count));
 }
