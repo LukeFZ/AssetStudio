@@ -215,7 +215,7 @@ namespace AssetStudioGUI
                                 var preloadEnd = preloadIndex + preloadSize;
                                 for (int k = preloadIndex; k < preloadEnd; k++)
                                 {
-                                    containers.Add((m_AssetBundle.m_PreloadTable[k], m_Container.Key));
+                                    containers.Add((m_AssetBundle.m_PreloadTable[k], m_Container.Value.address));
                                 }
                             }
                             assetItem.Text = m_AssetBundle.m_Name;
