@@ -13,7 +13,6 @@ namespace AssetStudio
 
         public AssetInfo(ObjectReader reader)
         {
-            if (reader.m_Version < SerializeFileFormatVersion.Unknown_14)
             if (reader.m_Version < SerializedFileFormatVersion.Unknown_14)
             {
                 reader.ReadInt32();
