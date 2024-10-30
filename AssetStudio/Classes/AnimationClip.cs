@@ -604,7 +604,7 @@ namespace AssetStudio
         public AclClip(ObjectReader reader)
         {
             var m_CurveCount = reader.ReadInt32();
-            data = reader.ReadUint8Array();
+            data = reader.ReadUInt8Array();
         }
     }
 
