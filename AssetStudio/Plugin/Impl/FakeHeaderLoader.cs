@@ -27,7 +27,7 @@ public class FakeHeaderLoader : FileLoader
         var buf = ArrayPool<byte>.Shared.Rent(0x250);
 
         file.Position = 1;
-        var read = file.Read(buf, 0, 0x250);
+        var read = file.Read(buf, 0, (int)Math.Min(file.Length, 0x1000));
         var offset = buf.AsSpan(0, read).LastIndexOf("UnityFS"u8);
 
         ArrayPool<byte>.Shared.Return(buf);

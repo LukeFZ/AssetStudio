@@ -14,6 +14,9 @@ public class OnePunchLoader : FileLoader
         if (bundleFile.m_Header.signature != "UnityFS")
             return false;
 
+        if (bundleFile.m_Header.unityVersion is not ("" or "2019.4.40f1"))
+            return false;
+
         if (reader.ReadUInt32() == 0 && reader.ReadUInt32() == 0)
             return false;
 

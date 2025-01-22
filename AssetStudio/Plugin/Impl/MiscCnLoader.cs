@@ -61,7 +61,14 @@ public class MiscCnLoader : FileLoader
 
     public override bool CanProcessFile(Stream file, string filename)
     {
-        var reader = new EndianBinaryReader(file);
+        var fakeHeaderLoader = new FakeHeaderLoader();
+        if (!fakeHeaderLoader.CanProcessFile(file, filename))
+            return false;
+
+        file.Position = 0;
+        var actualBundle = fakeHeaderLoader.ProcessFile(file, filename);
+
+        var reader = new EndianBinaryReader(actualBundle);
         var bundleFile = new BundleFile();
         bundleFile.Initialize(reader);
         if (!bundleFile.m_Header.signature.EndsWith("UnityFS"))
