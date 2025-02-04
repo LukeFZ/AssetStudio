@@ -597,6 +597,17 @@ namespace AssetStudio
         }
     }
 
+    public class AclClip
+    {
+        public byte[] data;
+        
+        public AclClip(ObjectReader reader)
+        {
+            var m_CurveCount = reader.ReadInt32();
+            data = reader.ReadUInt8Array();
+        }
+    }
+
     public class ValueConstant
     {
         public uint m_ID;
@@ -638,6 +649,7 @@ namespace AssetStudio
         public DenseClip m_DenseClip;
         public ConstantClip m_ConstantClip;
         public ValueArrayConstant m_Binding;
+        public AclClip m_AclClip;
 
         public Clip(ObjectReader reader)
         {
@@ -648,6 +660,11 @@ namespace AssetStudio
             {
                 m_ConstantClip = new ConstantClip(reader);
             }
+
+            // EndlessDream
+            m_AclClip = new AclClip(reader);
+            reader.AlignStream();
+            
             if (version[0] < 2018 || (version[0] == 2018 && version[1] < 3)) //2018.3 down
             {
                 m_Binding = new ValueArrayConstant(reader);
@@ -979,6 +996,13 @@ namespace AssetStudio
                 m_UseHighQualityCurve = reader.ReadBoolean();
             }
             reader.AlignStream();
+
+            // EndlesssDream
+            var m_AclCompressionLevel = reader.ReadInt32();
+            var m_AclCompressionArror = reader.ReadSingle();
+            var m_UseAclCompression = reader.ReadBoolean();
+            reader.AlignStream();
+            
             int numRCurves = reader.ReadInt32();
             m_RotationCurves = new QuaternionCurve[numRCurves];
             for (int i = 0; i < numRCurves; i++)

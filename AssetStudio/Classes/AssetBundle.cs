@@ -13,6 +13,15 @@ namespace AssetStudio
 
         public AssetInfo(ObjectReader reader)
         {
+            if (reader.m_Version < SerializedFileFormatVersion.Unknown_14)
+            {
+                reader.ReadInt32();
+            }
+            else
+            {
+                reader.ReadInt64();
+            }
+
             preloadIndex = reader.ReadInt32();
             preloadSize = reader.ReadInt32();
             asset = new PPtr<Object>(reader);
@@ -37,7 +46,9 @@ namespace AssetStudio
             m_Container = new KeyValuePair<string, AssetInfo>[m_ContainerSize];
             for (int i = 0; i < m_ContainerSize; i++)
             {
-                m_Container[i] = new KeyValuePair<string, AssetInfo>(reader.ReadAlignedString(), new AssetInfo(reader));
+                var assetInfo = new AssetInfo(reader);
+                var container = reader.ReadAlignedString();
+                m_Container[i] = new KeyValuePair<string, AssetInfo>(container, assetInfo);
             }
         }
     }
