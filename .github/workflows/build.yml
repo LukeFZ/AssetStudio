@@ -36,11 +36,11 @@ jobs:
       - name: Nuget Restore
         run: nuget restore
       
-      - name: Build .Net7
-        run: msbuild /t:AssetStudioGUI:publish /p:Configuration=Release /p:Platform=x64 /p:TargetFramework=net7.0-windows /p:SelfContained=false /verbosity:minimal
+      - name: Build
+        run: msbuild /t:AssetStudioGUI:publish /p:Configuration=Release /p:Platform=x64 /p:TargetFramework=net9.0-windows /p:SelfContained=false /verbosity:minimal
 
-      - name: Upload .Net7 Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AssetStudio.net7
-          path: AssetStudioGUI/bin/Release/net7.0-windows/publish
+          name: AssetStudio
+          path: AssetStudioGUI/bin/Release/net9.0-windows/publish
