@@ -24,7 +24,7 @@ public class FakeHeaderLoader : FileLoader
 
     private static int FindOffset(Stream file)
     {
-        var buf = ArrayPool<byte>.Shared.Rent(0x250);
+        var buf = ArrayPool<byte>.Shared.Rent(0x1000);
 
         file.Position = 1;
         var read = file.Read(buf, 0, (int)Math.Min(file.Length, 0x1000));
