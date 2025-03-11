@@ -1,35 +1,15 @@
-﻿using System.Diagnostics;
-using System;
+﻿using System;
+using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace AssetStudio.Plugin.Impl;
 
-file static class Extensions
+// tired :(
+// this is a pretty janky setup
+public class FairGuardLoaders : FileLoader
 {
-    [DebuggerStepThrough] public static byte RotateLeft(this byte val, int count) => (byte)((val << count) | (val >> (8 - count)));
-}
-
-public class FairguardLoader : FileLoader
-{
-    public override Stream ProcessFile(Stream file, string filename)
-    {
-        var encInfo = GetEncryptedBlockData(file);
-        if (encInfo == null)
-            throw new UnreachableException();
-
-        var (encBlock, encPos) = encInfo.Value;
-        Decrypt(encBlock);
-
-        var ms = new MemoryStream();
-        file.Seek(0, SeekOrigin.Begin);
-        file.CopyTo(ms);
-        ms.Seek(encPos, SeekOrigin.Begin);
-        ms.Write(encBlock);
-
-        ms.Seek(0, SeekOrigin.Begin);
-
-        return ms;
-    }
+    public override bool ReturnsBundleFile => true;
 
     public override bool CanProcessFile(Stream file, string filename)
     {
@@ -41,13 +21,90 @@ public class FairguardLoader : FileLoader
 
             var (encData, _) = encInfo.Value;
 
-            return encData != null && CanBeDecrypted(encData);
-        } 
+            return encData != null && CanBeDecrypted(encData, out _);
+        }
         catch (Exception)
         {
             return false;
         }
     }
+
+    public override BundleFile ProcessBundle(FileReader reader)
+    {
+        var encInfo = GetEncryptedBlockData(reader.BaseStream);
+        if (encInfo == null)
+            throw new UnreachableException();
+
+        var (encBlock, encPos) = encInfo.Value;
+
+        var ms = new MemoryStream();
+        reader.BaseStream.Seek(0, SeekOrigin.Begin);
+        reader.BaseStream.CopyTo(ms);
+
+        if (CanBeDecrypted(encBlock, out var isVersion1) && isVersion1)
+        {
+            DecryptV1(encBlock);
+
+            ms.Seek(encPos, SeekOrigin.Begin);
+            ms.Write(encBlock);
+
+            ms.Seek(0, SeekOrigin.Begin);
+
+            return BundleFile.Create(new FileReader(reader.FullPath, ms));
+        }
+
+        for (int i = 0; i < 2; i++)
+        {
+            var copy = encBlock.AsSpan().ToArray();
+
+            switch (i)
+            {
+                case 0:
+                    DecryptV2(copy);
+                    break;
+                case 1:
+                    DecryptV3(copy);
+                    break;
+                default:
+                    throw new UnreachableException();
+            }
+
+            ms.Seek(encPos, SeekOrigin.Begin);
+            ms.Write(copy);
+
+            ms.Seek(0, SeekOrigin.Begin);
+
+            try
+            {
+                var bundle = BundleFile.Create(new FileReader(reader.FullPath, ms));
+                return bundle;
+            }
+            catch (Exception)
+            {
+                // ignore
+            }
+        }
+
+        throw new InvalidOperationException("Failed to decrypt bundle with any of the known FairGuard variations.");
+    }
+
+    public static void DecryptV1(Span<byte> encData) => DecryptOld(encData);
+
+    public static void DecryptV2(Span<byte> encData) => DecryptNew(encData, [
+        0x2D06211Fu,
+        0xBE482704u,
+        0x753BDCAAu,
+        0x611C39EFu,
+        0x281CB453u
+    ]);
+
+    public static void DecryptV3(Span<byte> encData) => DecryptNew(encData, [
+        0x226a61b9u,
+        0x7a39d018u,
+        0x18f6d8aau,
+        0xaa255fb1u,
+        0xf78dd8ebu
+    ]);
 
     private static (byte[] encData, long encPos)? GetEncryptedBlockData(Stream file)
     {
@@ -64,20 +121,106 @@ public class FairguardLoader : FileLoader
 
         var firstBlock = bundle.m_BlocksInfo[0];
 
-        var encBlockSize = firstBlock.compressedSize < 0x500 ? firstBlock.compressedSize : 0x500;
+        var encBlockSize = Math.Min(firstBlock.compressedSize, 0x500);
         var encPos = reader.Position;
         return (reader.ReadBytes((int)encBlockSize), encPos);
     }
 
-    private static bool CanBeDecrypted(Span<byte> encData)
+    private static bool CanBeDecrypted(Span<byte> encData, out bool isVersion1)
     {
-        return 
-            encData.Length >= 31
-            // Crazy heuristic
-            && encData[..4].Contains<byte>(0xb7);
+        isVersion1 = false;
+        if (32 > encData.Length) return false;
+
+        var headerBytes = encData[..4];
+        isVersion1 = headerBytes.Contains<byte>(0xb7);
+
+        return isVersion1 || headerBytes.Contains<byte>(0xa6);
     }
 
-    public static void Decrypt(Span<byte> encData)
+    private static void DecryptNew(Span<byte> encData, ReadOnlySpan<uint> xorConstants)
+    {
+        Debug.Assert(xorConstants.Length == 5);
+
+        var encLength = (uint)encData.Length;
+        var remainingData = encData;
+
+        var encDataInt = remainingData.As<uint>();
+
+        for (int i = 0; i < 32; i++)
+            remainingData[i] ^= 0xa6;
+
+        remainingData = remainingData[0x20..];
+        if (remainingData.Length == 0)
+            return;
+
+        var encBlock1 = (stackalloc uint[5]);
+        encBlock1[0] = encDataInt[2] ^ encDataInt[6] ^ xorConstants[0];
+        encBlock1[1] = encDataInt[3] ^ encDataInt[0] ^ xorConstants[1] ^ encLength;
+        encBlock1[2] = encDataInt[1] ^ encDataInt[5] ^ xorConstants[2] ^ encLength;
+        encBlock1[3] = encDataInt[0] ^ encDataInt[7] ^ xorConstants[3];
+        encBlock1[4] = encDataInt[4] ^ encDataInt[7] ^ xorConstants[4];
+
+        // Surprise tool for later :)
+        var encBlock1Derived = (stackalloc byte[4]);
+        DeriveKey(encBlock1, encBlock1Derived);
+        var encBlock1Crc = CustomCrc32.GetCrc32(encBlock1Derived) + 2;
+        var encBlock1CrcBytes = (stackalloc byte[4]);
+        encBlock1CrcBytes.As<uint>()[0] = encBlock1Crc;
+
+        var encBlockRc4 = new CustomRc4(kb => (byte)(byte.RotateLeft(kb, 1) - 0x61));
+        if (0x80 > remainingData.Length)
+        {
+            encBlockRc4.Decrypt(remainingData, encBlock1CrcBytes);
+        }
+        else
+        {
+            var encBlock1Key =
+                encBlock1[0] ^ encBlock1[1] ^ encBlock1[2] ^ encBlock1[3] ^ encBlock1[4] ^ encLength;
+
+            encBlockRc4.Decrypt(encBlock1.AsBytes(), BitConverter.GetBytes(encBlock1Key));
+
+            var decBlock1Crc = CustomCrc32.GetCrc32(encBlock1.AsBytes()) + 2;
+
+            var crcKeyMaterial = (stackalloc uint[1]);
+            crcKeyMaterial[0] = decBlock1Crc;
+
+            var secondGenerated = (stackalloc byte[4]);
+            DeriveKey(crcKeyMaterial, secondGenerated);
+            var secondGeneratedKey = secondGenerated.As<uint>()[0];
+
+            var keyMaterial21 = (encBlock1[3] - 0x1C26B82Du) ^ secondGeneratedKey;
+            var keyMaterial22 = (encBlock1[0] ^ 0x82C57E3C) ^ secondGeneratedKey;
+            var keyMaterial23 = (encBlock1[1] + 0x6F2A7347) ^ encBlock1Crc;
+            var keyMaterial24 = (encBlock1[2] + 0x3F72EAF3u) ^ encBlock1Crc;
+
+            var encBlock = remainingData[..0x60];
+            encBlockRc4.Decrypt(encBlock, encBlock1CrcBytes);
+            for (int i = 0; i < encBlock.Length; i++)
+                encBlock[i] ^= (byte)(encBlock1Crc ^ 0x6e);
+
+            remainingData = remainingData[0x60..];
+
+            var blockSize = remainingData.Length / 4;
+
+            var roundKeys = (stackalloc uint[4]);
+            roundKeys[0] = encBlock1Crc ^ keyMaterial21 ^ 0x6142756Eu;
+            roundKeys[1] = encBlock1Crc ^ keyMaterial24 ^ 0x62496E66u;
+            roundKeys[2] = encBlock1Crc ^ keyMaterial22 ^ 0x1304B000u;
+            roundKeys[3] = encBlock1Crc ^ keyMaterial23 ^ 0x6E8E30ECu;
+
+            for (int i = 0; i < 4; i++)
+            {
+                var current = remainingData.Slice(i * blockSize, blockSize);
+                encBlockRc4.Decrypt(current, encBlock1CrcBytes);
+
+                var currentUint = current.As<uint>();
+                for (int j = 0; j < currentUint.Length; j++)
+                    currentUint[j] ^= roundKeys[i];
+            }
+        }
+    }
+
+    private static void DecryptOld(Span<byte> encData)
     {
         var encLength = encData.Length;
 
@@ -91,12 +234,12 @@ public class FairguardLoader : FileLoader
 
         // Surprise tool for later :)
         var encBlock2Key = (stackalloc byte[4]);
-        GenerateKey(ref encBlock1, out encBlock2Key);
+        DeriveKey(encBlock1, encBlock2Key);
         var encBlock2KeyInt = encBlock2Key.As<uint>()[0];
 
         var encBlock1Key = (uint)encLength ^ encBlock1[0] ^ encBlock1[1] ^ encBlock1[2] ^ encBlock1[3] ^ 0x5E8BC918u;
 
-        var encBlockRc4 = new CustomRc4(kb => (byte)(kb.RotateLeft(1) - 0x61));
+        var encBlockRc4 = new CustomRc4(kb => (byte)(byte.RotateLeft(kb, 1) - 0x61));
         encBlockRc4.Decrypt(encBlock1.AsBytes(), BitConverter.GetBytes(encBlock1Key));
 
         var crc = CustomCrc32.GetCrc32(encBlock1.AsBytes());
@@ -120,7 +263,7 @@ public class FairguardLoader : FileLoader
         keyMaterial2[3] = (encBlock1[1] + 0x48D0E844) ^ encBlock2KeyInt;
 
         var keyBlockKey = (stackalloc byte[4]);
-        GenerateKey(ref keyMaterial2, out keyBlockKey);
+        DeriveKey(keyMaterial2, keyBlockKey);
 
         var encBlock2 = encData.Slice(0x20, 0x80);
         var keyBlock = encBlock2.ToArray().AsSpan();
@@ -178,9 +321,10 @@ public class FairguardLoader : FileLoader
         }
     }
 
-    private static void GenerateKey(ref Span<uint> keyMaterial, out Span<byte> outKey)
+    // Used for V2 and V3
+    private static void DeriveKey(ReadOnlySpan<uint> keyMaterial, Span<byte> outKey)
     {
-        var keyMaterialBytes = keyMaterial.AsBytes();
+        var keyMaterialBytes = MemoryMarshal.AsBytes(keyMaterial);
 
         var temp1 = 0x78DA0550u;
         var temp2 = 0x2947E56Bu;
@@ -237,18 +381,13 @@ public class FairguardLoader : FileLoader
             }
         }
 
-        outKey = BitConverter.GetBytes(key).AsSpan();
+        BitConverter.GetBytes(key).CopyTo(outKey);
     }
 }
 
-file class CustomRc4
+file class CustomRc4(Func<byte, byte> transform)
 {
-    private readonly Func<byte, byte> _transform;
-
-    public CustomRc4(Func<byte, byte> transform)
-    {
-        _transform = transform;
-    }
+    private readonly Func<byte, byte> _transform = transform;
 
     public void Decrypt(Span<byte> data, Span<byte> key)
     {
