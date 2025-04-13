@@ -51,11 +51,16 @@ public class NeteaseLoader : FileLoader
     {
         var reader = new EndianBinaryReader(file);
         var bundle = new BundleFile();
+
         bundle.Initialize(reader);
         if (bundle.m_Header.signature != "UnityFS")
             return null;
 
         bundle.ReadHeader(reader);
+        
+        // we need the offset before aligning the stream at the end
+        bundle.m_Header.flags &= ~ArchiveFlags.BlockInfoNeedPaddingAtStart;
+
         bundle.ReadBlocksInfoAndDirectory(reader);
         if (bundle.m_BlocksInfo.Length == 0)
             return null;
@@ -64,6 +69,7 @@ public class NeteaseLoader : FileLoader
 
         var encBlockSize = firstBlock.compressedSize < 0x1000 ? firstBlock.compressedSize : 0x1000;
         var encPos = reader.Position;
+
         return (reader.ReadBytes((int)encBlockSize), encPos);
     }
 
